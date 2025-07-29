@@ -57,7 +57,7 @@ function createMiniMapCanvas(settings) {
     const minimapDiv = document.createElement("div");
     minimapDiv.id = "minimap";
     minimapDiv.style.position = "fixed";
-    minimapDiv.style.right = settings.margin + "px";
+    minimapDiv.style.right = (settings.margin + 50) + "px";  // Moved 50px to the left
     minimapDiv.style.bottom = settings.margin + "px";
     minimapDiv.style.width = settings.width + "px";
     minimapDiv.style.height = settings.height + "px";
@@ -66,8 +66,8 @@ function createMiniMapCanvas(settings) {
     minimapDiv.style.zIndex = 1000;
     minimapDiv.style.opacity = settings.opacity;
     minimapDiv.style.transition = "opacity 0.5s ease";
-    // Prevent the minimap from capturing scroll events on the main page
     minimapDiv.style.overflow = "hidden";
+    minimapDiv.style.borderRadius = "6px";  // Slightly rounded corners
 
     document.body.appendChild(minimapDiv);
 
@@ -78,6 +78,7 @@ function createMiniMapCanvas(settings) {
 
     return { minimapDiv, minimapCanvas };
 }
+
 
 // Get a sensible default colour for a link based on its type.  If the link
 // specifies its own colour it will take precedence; otherwise ComfyUI's
