@@ -60,7 +60,7 @@ function createMiniMapCanvas(settings) {
     minimapDiv.style.right = (settings.margin + 50) + "px";  // Moved 50px to the left
     minimapDiv.style.bottom = settings.margin + "px";
     minimapDiv.style.width = settings.width + "px";
-    minimapDiv.style.height = settings.height + "px";
+    minimapDiv.style.height = (settings.height + 50) + "px";
     minimapDiv.style.border = "1px solid var(--border-color)";
     minimapDiv.style.backgroundColor = "var(--bg-color)";
     minimapDiv.style.zIndex = 1000;
