@@ -117,9 +117,21 @@ function getNodePreviewImage(node) {
         const idStr = node?.id != null ? String(node.id) : "";
         const container = document.getElementById(`node-${idStr}`);
         if (container) {
+            // Prefer <img> elements for previews
             const imgEl = container.querySelector("img");
             if (imgEl && imgEl.src) {
                 return imgEl.src;
+            }
+            // Some previews may be rendered on a canvas element.  Convert
+            // the canvas to a data URI if possible.
+            const canvasEl = container.querySelector("canvas");
+            if (canvasEl) {
+                try {
+                    const dataUri = canvasEl.toDataURL && canvasEl.toDataURL();
+                    if (dataUri && dataUri.startsWith("data:image")) return dataUri;
+                } catch (_) {
+                    // ignore any errors
+                }
             }
         }
         // Fall back to inspecting widgets for base64-encoded images.  Some
