@@ -90,6 +90,30 @@ function isNodeBypassed(node) {
             }
         }
         if (node.isBypassed === true) return true;
+        // New detection: some versions of ComfyUI use the LiteGraph event mode to
+        // signal bypass.  When a node is set to BYPASS mode, its `mode`
+        // property will equal the BYPASS constant defined in LGraphEventMode.
+        // The enum value is 4 in current builds.  We fall back to checking
+        // against the numeric value to avoid importing LiteGraph directly.
+        try {
+            if (typeof node.mode !== "undefined") {
+                // Attempt to detect the BYPASS constant from LiteGraph if
+                // available.  Otherwise assume 4.
+                let bypassModeValue = 4;
+                if (typeof LiteGraph !== "undefined" &&
+                    LiteGraph.LGraphEventMode &&
+                    typeof LiteGraph.LGraphEventMode.BYPASS !== "undefined") {
+                    bypassModeValue = LiteGraph.LGraphEventMode.BYPASS;
+                }
+                // node.mode may be numeric or string (e.g. "BYPASS")
+                if (node.mode === bypassModeValue ||
+                    String(node.mode).toUpperCase() === "BYPASS") {
+                    return true;
+                }
+            }
+        } catch (_) {
+            // ignore errors if LiteGraph is not defined
+        }
         // Some nodes change their colour when bypassed.  If the colour
         // matches the default bypass purple (approx. #a855f7) we treat it as bypassed.
         const colourStr = String(node.color || "").toLowerCase();
