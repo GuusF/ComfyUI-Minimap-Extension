@@ -24,3 +24,5 @@ For my own experimentation – feel free to try it out!
 *Fade in/out behaviour* – The minimap fades out after a period of inactivity (default 3 seconds) and fades back in when you interact with the graph. This keeps it unobtrusive while still available when needed.
 
 <img width="361" height="196" alt="image" src="https://github.com/user-attachments/assets/d27d2327-cfa9-4822-ac3f-56ab9896fc94" />
+
+<img width="1852" height="969" alt="image" src="https://github.com/user-attachments/assets/21f8b0a4-f386-4d2c-9513-f21218666b06" />
