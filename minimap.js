@@ -603,9 +603,9 @@ function initializeMinimap() {
         // providing enough room for previews.  These values were chosen
         // to better balance size against the surrounding UI elements.
         width: 300,
-        height: 200,
+        height: 180,
         margin: 10,
-        opacity: 0.9,
+        opacity: 0.5,
     };
     const { minimapDiv, minimapCanvas } = createMiniMapCanvas(settings);
     // Render loop: redraw the minimap at a low frequency so it stays up
