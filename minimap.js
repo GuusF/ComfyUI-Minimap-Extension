@@ -394,7 +394,7 @@ function renderMiniMap(graph, canvas) {
         } else if (isNodeBypassed(node)) {
             // Use a slightly more opaque purple so bypassed nodes are
             // distinguishable even at small scales
-            ctx.fillStyle = "rgba(168, 85, 247, 0.8)"; // purple for bypass
+            ctx.fillStyle = "rgba(168, 85, 247, 0.3)"; // purple for bypass
         } else {
             ctx.fillStyle = nodeColour;
         }
