@@ -137,45 +137,25 @@ function isNodeBypassed(node) {
  */
 function getNodePreviewImage(node) {
     try {
-        // Attempt to find an <img> element associated with this node.  The
-        // ComfyUI UI wraps each node in a container with id `node-${id}`.
         const idStr = node?.id != null ? String(node.id) : "";
         const container = document.getElementById(`node-${idStr}`);
         if (container) {
-            // Prefer <img> elements for previews
+            // First try for an <img> (old fallback)
             const imgEl = container.querySelector("img");
-            if (imgEl && imgEl.src) {
-                return imgEl.src;
-            }
-            // Some previews may be rendered on a canvas element.  Convert
-            // the canvas to a data URI if possible.
+            if (imgEl && imgEl.src) return imgEl.src;
+
+            // NEW: try for <canvas> preview
             const canvasEl = container.querySelector("canvas");
-            if (canvasEl) {
-                try {
-                    const dataUri = canvasEl.toDataURL && canvasEl.toDataURL();
-                    if (dataUri && dataUri.startsWith("data:image")) return dataUri;
-                } catch (_) {
-                    // ignore any errors
-                }
-            }
-        }
-        // Fall back to inspecting widgets for base64-encoded images.  Some
-        // nodes store preview data in widget values.
-        if (node.widgets) {
-            for (const w of node.widgets) {
-                if (typeof w?.value === "string" && w.value.startsWith("data:image")) {
-                    return w.value;
-                }
-                if (w?.value && typeof w.value.data === "string" && w.value.data.startsWith("data:image")) {
-                    return w.value.data;
-                }
+            if (canvasEl && canvasEl.toDataURL) {
+                return canvasEl.toDataURL("image/webp");
             }
         }
     } catch (err) {
-        // ignore any errors and fall through
+        // ignore
     }
     return null;
 }
+
 
 /**
  * Draw a tiny preview image inside a node rectangle on the minimap.  This
