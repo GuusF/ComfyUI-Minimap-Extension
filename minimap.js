@@ -47,6 +47,8 @@ function isNodeError(node) {
         if (node == null) return false;
         // ComfyUI sets this flag when a node fails to execute
         if (node.error === true || node.has_error === true) return true;
+        // Some versions expose an invalid flag directly on the node
+        if (node.invalid === true || node.is_invalid === true || node.isInvalid === true) return true;
         // Some nodes contain a flags object with error information
         if (node.flags && (node.flags.error || node.flags.invalid)) return true;
         // widgets_invalid is an array of widgets that failed validation
@@ -72,14 +74,14 @@ function isNodeBypassed(node) {
     try {
         if (!node) return false;
         // Common flags used in various versions of ComfyUI
-        if (node.bypassed === true) return true;
+        if (node.bypassed === true || node.is_bypassed === true) return true;
         if (node.bypass === true) return true;
         if (node.flags && (node.flags.bypassed === true || node.flags.bypass === true)) return true;
         // Some versions may use muted to skip execution entirely
         if (node.flags && node.flags.muted === true) return true;
         // Additional flags used in some versions to signal bypass/disabled state
         if (node.flags && (node.flags.disabled === true || node.flags.skip === true || node.flags.skipped === true)) return true;
-        // Check if the node exposes an isBypassed() helper
+        // Check if the node exposes an isBypassed() helper or boolean flag
         if (typeof node.isBypassed === "function") {
             try {
                 if (node.isBypassed()) return true;
@@ -87,6 +89,11 @@ function isNodeBypassed(node) {
                 // ignore any errors
             }
         }
+        if (node.isBypassed === true) return true;
+        // Some nodes change their colour when bypassed.  If the colour
+        // matches the default bypass purple (approx. #a855f7) we treat it as bypassed.
+        const colourStr = String(node.color || "").toLowerCase();
+        if (colourStr.includes("a855f7") || colourStr.includes("purple")) return true;
     } catch (err) {
         // ignore errors
     }
@@ -343,7 +350,9 @@ function renderMiniMap(graph, canvas) {
         if (isNodeError(node)) {
             ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // red for error
         } else if (isNodeBypassed(node)) {
-            ctx.fillStyle = "rgba(168, 85, 247, 0.7)"; // purple for bypass
+            // Use a slightly more opaque purple so bypassed nodes are
+            // distinguishable even at small scales
+            ctx.fillStyle = "rgba(168, 85, 247, 0.8)"; // purple for bypass
         } else {
             ctx.fillStyle = nodeColour;
         }
@@ -356,12 +365,13 @@ function renderMiniMap(graph, canvas) {
             drawNodePreview(ctx, node, x, y, w, h);
         }
 
-        // Outline error nodes with a red border for better visibility.  The
-        // border has a fixed thickness rather than scaling with the graph,
-        // as thicker lines can overwhelm small nodes when scaled down.
+        // Outline error nodes with a red border for better visibility.  Use a
+        // slightly thicker stroke so the border remains visible even when
+        // scaled down.  We don't scale line width by `scale` directly to
+        // avoid extremely thin or thick lines when zooming.
         if (isNodeError(node)) {
             ctx.strokeStyle = "red";
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 3;
             ctx.strokeRect(x, y, w, h);
         }
 
@@ -547,11 +557,11 @@ function initializeMinimap() {
     });
     // Build the DOM elements for the minimap
     const settings = {
-        // Increase the minimap dimensions so it better aligns with the
-        // toolbox buttons in the ComfyUI interface.  A larger canvas
-        // provides more real estate for drawing nodes and previews.
-        width: 350,
-        height: 200,
+        // Adjust minimap dimensions so it remains compact while still
+        // providing enough room for previews.  These values were chosen
+        // to better balance size against the surrounding UI elements.
+        width: 300,
+        height: 160,
         margin: 10,
         opacity: 1
     };
