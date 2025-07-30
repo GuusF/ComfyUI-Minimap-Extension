@@ -140,21 +140,41 @@ function getNodePreviewImage(node) {
         const idStr = node?.id != null ? String(node.id) : "";
         const container = document.getElementById(`node-${idStr}`);
         if (container) {
-            // First try for an <img> (old fallback)
+            const canvasEl = container.querySelector("canvas");
+            if (canvasEl) {
+                // Wait until the canvas has actual pixels
+                try {
+                    const dataUri = canvasEl.toDataURL();
+                    if (dataUri && dataUri.startsWith("data:image")) {
+                        return dataUri;
+                    }
+                } catch (e) {
+                    // Not ready yet
+                }
+            }
+
             const imgEl = container.querySelector("img");
             if (imgEl && imgEl.src) return imgEl.src;
+        }
 
-            // NEW: try for <canvas> preview
-            const canvasEl = container.querySelector("canvas");
-            if (canvasEl && canvasEl.toDataURL) {
-                return canvasEl.toDataURL("image/webp");
+        // Try from widgets
+        if (node.widgets) {
+            for (const w of node.widgets) {
+                if (typeof w?.value === "string" && w.value.startsWith("data:image")) {
+                    return w.value;
+                }
+                if (w?.value && typeof w.value.data === "string" && w.value.data.startsWith("data:image")) {
+                    return w.value.data;
+                }
             }
         }
     } catch (err) {
-        // ignore
+        // Ignore
     }
+
     return null;
 }
+
 
 
 /**
