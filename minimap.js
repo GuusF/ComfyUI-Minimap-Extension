@@ -1,18 +1,20 @@
 /*
- * Enhanced Minimap for ComfyUI
+ * Enhanced Minimap for ComfyUI with additional features
  *
- * This script implements a minimap overlay for the ComfyUI graph.  It is
- * designed to run in the browser as part of a custom node extension.  When
- * loaded, it draws a scaled representation of the current graph in the
- * bottom‑right corner of the viewport, including the connections between
- * nodes.  Error nodes are highlighted in red, and the minimap fades out
- * after a period of inactivity (default 3 seconds).  Dragging on the
- * minimap pans the main graph accordingly.
+ * This script implements a minimap overlay for the ComfyUI graph.  It
+ * draws a scaled representation of the current graph in the bottom‑right
+ * corner of the viewport, including the connections between nodes.  Error
+ * nodes are highlighted in red, bypassed nodes are highlighted in the
+ * same purple as the main UI, and the minimap fades out after a period
+ * of inactivity (default 3 seconds).  Dragging on the minimap pans the
+ * main graph accordingly.  When image preview nodes (e.g. Preview Image
+ * or Load Image) are present, a tiny preview of the image is drawn in
+ * the node box on the minimap.
  */
 
 import { api } from "../../scripts/api.js";
 
-console.log("Enhanced minimap extension loaded");
+console.log("Enhanced minimap extension with previews loaded");
 
 // Height of the node title bar in pixels.  This value is used when
 // calculating node geometry for the minimap.  It matches the value used in
@@ -28,10 +30,18 @@ let currentExecutingNode = "0";
 let lastActivityTime = Date.now();
 const FADE_DELAY = 3000; // milliseconds
 
-// Utility to determine whether a node should be considered in an error
-// state.  ComfyUI marks invalid nodes via a variety of flags; this helper
-// attempts to cover the most common ones.  If none are present, the node
-// is treated as non‑error.
+// Cache for image previews so we don't reload the same image repeatedly.
+const previewCache = new Map();
+
+/**
+ * Determine whether a node should be considered in an error state.
+ * ComfyUI marks invalid nodes via a variety of flags; this helper
+ * attempts to cover the most common ones.  If none are present, the node
+ * is treated as non‑error.
+ *
+ * @param {Object} node - The node to check.
+ * @returns {boolean} true if the node is in an error state.
+ */
 function isNodeError(node) {
     try {
         if (node == null) return false;
@@ -50,22 +60,133 @@ function isNodeError(node) {
     return false;
 }
 
+/**
+ * Determine whether a node is bypassed.  The bypass state can be stored
+ * on different properties depending on the version of ComfyUI.  We check
+ * multiple possibilities for robustness.
+ *
+ * @param {Object} node - The node to check.
+ * @returns {boolean} true if the node is bypassed.
+ */
 function isNodeBypassed(node) {
-    return node?.flags?.bypassed === true;
+    try {
+        if (!node) return false;
+        // Common flags used in various versions of ComfyUI
+        if (node.bypassed === true) return true;
+        if (node.bypass === true) return true;
+        if (node.flags && (node.flags.bypassed === true || node.flags.bypass === true)) return true;
+        // Some versions may use muted to skip execution entirely
+        if (node.flags && node.flags.muted === true) return true;
+    } catch (err) {
+        // ignore errors
+    }
+    return false;
 }
 
+/**
+ * Attempt to obtain a preview image source from a node.  For image preview
+ * nodes (such as Preview Image and Load Image), ComfyUI inserts an <img>
+ * element into the node's DOM.  We first try to locate such an element.
+ * Failing that, we inspect widget values for base64 image data.  If
+ * successful, returns a data URI or URL that can be drawn onto a canvas.
+ *
+ * @param {Object} node - The node whose preview to retrieve.
+ * @returns {string|null} A data URI/URL for the image, or null if none found.
+ */
+function getNodePreviewImage(node) {
+    try {
+        // Attempt to find an <img> element associated with this node.  The
+        // ComfyUI UI wraps each node in a container with id `node-${id}`.
+        const idStr = node?.id != null ? String(node.id) : "";
+        const container = document.getElementById(`node-${idStr}`);
+        if (container) {
+            const imgEl = container.querySelector("img");
+            if (imgEl && imgEl.src) {
+                return imgEl.src;
+            }
+        }
+        // Fall back to inspecting widgets for base64-encoded images.  Some
+        // nodes store preview data in widget values.
+        if (node.widgets) {
+            for (const w of node.widgets) {
+                if (typeof w?.value === "string" && w.value.startsWith("data:image")) {
+                    return w.value;
+                }
+                if (w?.value && typeof w.value.data === "string" && w.value.data.startsWith("data:image")) {
+                    return w.value.data;
+                }
+            }
+        }
+    } catch (err) {
+        // ignore any errors and fall through
+    }
+    return null;
+}
+
+/**
+ * Draw a tiny preview image inside a node rectangle on the minimap.  This
+ * function caches images and scales them to fit within the node bounds
+ * while preserving aspect ratio.  If the image is not yet loaded, it
+ * registers an onload callback to trigger a re-render once loaded.
+ *
+ * @param {CanvasRenderingContext2D} ctx - The minimap canvas context.
+ * @param {Object} node - The node being drawn.
+ * @param {number} x - The x coordinate of the node on the minimap.
+ * @param {number} y - The y coordinate of the node on the minimap.
+ * @param {number} w - The width of the node on the minimap.
+ * @param {number} h - The height of the node on the minimap.
+ */
+function drawNodePreview(ctx, node, x, y, w, h) {
+    const src = getNodePreviewImage(node);
+    if (!src) return;
+    let img = previewCache.get(src);
+    if (!img) {
+        img = new Image();
+        img.src = src;
+        previewCache.set(src, img);
+        img.onload = () => {
+            // Once loaded, schedule a re-render of the minimap
+            if (window.app && window.app.graph && ctx.canvas) {
+                renderMiniMap(window.app.graph, ctx.canvas);
+            }
+        };
+    }
+    // Only draw if the image is loaded
+    if (!img.complete || img.naturalWidth === 0) return;
+    // Compute aspect ratio and fit within node bounds
+    const aspect = img.width / img.height;
+    let drawW = w;
+    let drawH = h;
+    if (drawH <= 0 || drawW <= 0) return;
+    if (drawW / drawH > aspect) {
+        // Canvas is wider relative to image
+        drawW = drawH * aspect;
+    } else {
+        // Canvas is taller relative to image
+        drawH = drawW / aspect;
+    }
+    const offsetX = x + (w - drawW) / 2;
+    const offsetY = y + (h - drawH) / 2;
+    try {
+        ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+    } catch (err) {
+        // ignore drawing errors
+    }
+}
 
 // Create and insert the minimap container and canvas.  The minimap is
 // positioned fixed in the bottom‑right corner and uses a CSS transition
-// on its opacity so that it can fade in and out smoothly.
+// on its opacity so that it can fade in and out smoothly.  We deliberately
+// omit any extra height padding so that the full minimap area is used.
 function createMiniMapCanvas(settings) {
     const minimapDiv = document.createElement("div");
     minimapDiv.id = "minimap";
     minimapDiv.style.position = "fixed";
-    minimapDiv.style.right = (settings.margin + 50) + "px";  // Moved 50px to the left
+    // Move slightly left to avoid overlap with ComfyUI scrollbars
+    minimapDiv.style.right = (settings.margin + 50) + "px";
     minimapDiv.style.bottom = settings.margin + "px";
     minimapDiv.style.width = settings.width + "px";
-    minimapDiv.style.height = (settings.height + 42) + "px";
+    minimapDiv.style.height = settings.height + "px"; // use full height, no padding
     minimapDiv.style.border = "1px solid var(--border-color)";
     minimapDiv.style.backgroundColor = "var(--bg-color)";
     minimapDiv.style.zIndex = 1000;
@@ -83,7 +204,6 @@ function createMiniMapCanvas(settings) {
 
     return { minimapDiv, minimapCanvas };
 }
-
 
 // Get a sensible default colour for a link based on its type.  If the link
 // specifies its own colour it will take precedence; otherwise ComfyUI's
@@ -207,15 +327,22 @@ function renderMiniMap(graph, canvas) {
         const w = width * scale;
         const h = height * scale;
 
-        // Highlight the node if it is in an error state
-      if (isNodeError(node)) {
-    ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // red
-} else if (isNodeBypassed(node)) {
-    ctx.fillStyle = "rgba(168, 85, 247, 0.7)"; // purple
-} else {
-    ctx.fillStyle = nodeColour;
-}
+        // Determine fill style based on state
+        if (isNodeError(node)) {
+            ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // red for error
+        } else if (isNodeBypassed(node)) {
+            ctx.fillStyle = "rgba(168, 85, 247, 0.7)"; // purple for bypass
+        } else {
+            ctx.fillStyle = nodeColour;
+        }
         ctx.fillRect(x, y, w, h);
+
+        // Draw preview image if available.  We only attempt to draw
+        // previews if the node rectangle is reasonably large; tiny nodes
+        // (e.g. collapsed or very small) won't fit an image.
+        if (w > 10 && h > 10) {
+            drawNodePreview(ctx, node, x, y, w, h);
+        }
 
         // Outline currently executing node in green
         if (String(node.id) === String(currentExecutingNode)) {
