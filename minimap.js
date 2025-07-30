@@ -77,6 +77,16 @@ function isNodeBypassed(node) {
         if (node.flags && (node.flags.bypassed === true || node.flags.bypass === true)) return true;
         // Some versions may use muted to skip execution entirely
         if (node.flags && node.flags.muted === true) return true;
+        // Additional flags used in some versions to signal bypass/disabled state
+        if (node.flags && (node.flags.disabled === true || node.flags.skip === true || node.flags.skipped === true)) return true;
+        // Check if the node exposes an isBypassed() helper
+        if (typeof node.isBypassed === "function") {
+            try {
+                if (node.isBypassed()) return true;
+            } catch (_) {
+                // ignore any errors
+            }
+        }
     } catch (err) {
         // ignore errors
     }
@@ -327,7 +337,9 @@ function renderMiniMap(graph, canvas) {
         const w = width * scale;
         const h = height * scale;
 
-        // Determine fill style based on state
+        // Determine fill style based on state.  Errors take precedence over
+        // bypassed nodes, followed by normal colouring.  The alpha values
+        // provide a translucent overlay so that previews remain visible.
         if (isNodeError(node)) {
             ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // red for error
         } else if (isNodeBypassed(node)) {
@@ -337,14 +349,24 @@ function renderMiniMap(graph, canvas) {
         }
         ctx.fillRect(x, y, w, h);
 
-        // Draw preview image if available.  We only attempt to draw
-        // previews if the node rectangle is reasonably large; tiny nodes
-        // (e.g. collapsed or very small) won't fit an image.
+        // Draw preview image if available.  Only attempt to draw previews
+        // when the node rectangle is sufficiently large; small nodes
+        // (collapsed or tiny) won't fit a preview.
         if (w > 10 && h > 10) {
             drawNodePreview(ctx, node, x, y, w, h);
         }
 
-        // Outline currently executing node in green
+        // Outline error nodes with a red border for better visibility.  The
+        // border has a fixed thickness rather than scaling with the graph,
+        // as thicker lines can overwhelm small nodes when scaled down.
+        if (isNodeError(node)) {
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+        }
+
+        // Outline currently executing node in green.  This is drawn after
+        // the error border so that the green frame appears on top.
         if (String(node.id) === String(currentExecutingNode)) {
             ctx.strokeStyle = "green";
             ctx.lineWidth = 1;
@@ -525,8 +547,11 @@ function initializeMinimap() {
     });
     // Build the DOM elements for the minimap
     const settings = {
-        width: 240,
-        height: 140,
+        // Increase the minimap dimensions so it better aligns with the
+        // toolbox buttons in the ComfyUI interface.  A larger canvas
+        // provides more real estate for drawing nodes and previews.
+        width: 350,
+        height: 200,
         margin: 10,
         opacity: 1
     };
