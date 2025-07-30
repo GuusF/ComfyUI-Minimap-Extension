@@ -139,41 +139,48 @@ function getNodePreviewImage(node) {
     try {
         const idStr = node?.id != null ? String(node.id) : "";
         const container = document.getElementById(`node-${idStr}`);
-        if (container) {
-            const canvasEl = container.querySelector("canvas");
-            if (canvasEl) {
-                // Wait until the canvas has actual pixels
-                try {
-                    const dataUri = canvasEl.toDataURL();
-                    if (dataUri && dataUri.startsWith("data:image")) {
-                        return dataUri;
-                    }
-                } catch (e) {
-                    // Not ready yet
-                }
-            }
+        if (!container) return null;
 
-            const imgEl = container.querySelector("img");
-            if (imgEl && imgEl.src) return imgEl.src;
+        // First try <img>
+        const imgEl = container.querySelector("img");
+        if (imgEl && imgEl.src?.startsWith("data:image")) return imgEl.src;
+
+        // Then try <canvas>
+        const canvasEl = container.querySelector("canvas");
+        if (canvasEl) {
+            try {
+                const dataUri = canvasEl.toDataURL();
+                if (dataUri && dataUri.startsWith("data:image")) return dataUri;
+
+                // If not ready yet, observe for changes and re-render
+                const observer = new MutationObserver(() => {
+                    const newUri = canvasEl.toDataURL();
+                    if (newUri && newUri.startsWith("data:image")) {
+                        previewCache.set(newUri, new Image());
+                        renderMiniMap(window.app.graph, document.querySelector("#minimap canvas"));
+                        observer.disconnect();
+                    }
+                });
+                observer.observe(canvasEl, { attributes: true, childList: true, subtree: true });
+            } catch (_) {
+                // Canvas not ready yet
+            }
         }
 
-        // Try from widgets
+        // Final fallback: widget value
         if (node.widgets) {
             for (const w of node.widgets) {
-                if (typeof w?.value === "string" && w.value.startsWith("data:image")) {
-                    return w.value;
-                }
-                if (w?.value && typeof w.value.data === "string" && w.value.data.startsWith("data:image")) {
-                    return w.value.data;
-                }
+                const val = w?.value?.data || w?.value;
+                if (typeof val === "string" && val.startsWith("data:image")) return val;
             }
         }
     } catch (err) {
-        // Ignore
+        // Silent fail
     }
 
     return null;
 }
+
 
 
 
