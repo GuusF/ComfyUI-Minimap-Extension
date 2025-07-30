@@ -50,6 +50,11 @@ function isNodeError(node) {
     return false;
 }
 
+function isNodeBypassed(node) {
+    return node?.flags?.bypassed === true;
+}
+
+
 // Create and insert the minimap container and canvas.  The minimap is
 // positioned fixed in the bottom‑right corner and uses a CSS transition
 // on its opacity so that it can fade in and out smoothly.
@@ -203,11 +208,13 @@ function renderMiniMap(graph, canvas) {
         const h = height * scale;
 
         // Highlight the node if it is in an error state
-        if (isNodeError(node)) {
-            ctx.fillStyle = "rgba(255, 0, 0, 0.7)";
-        } else {
-            ctx.fillStyle = nodeColour;
-        }
+      if (isNodeError(node)) {
+    ctx.fillStyle = "rgba(255, 0, 0, 0.7)"; // red
+} else if (isNodeBypassed(node)) {
+    ctx.fillStyle = "rgba(168, 85, 247, 0.7)"; // purple
+} else {
+    ctx.fillStyle = nodeColour;
+}
         ctx.fillRect(x, y, w, h);
 
         // Outline currently executing node in green
