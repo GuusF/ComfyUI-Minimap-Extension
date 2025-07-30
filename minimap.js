@@ -155,7 +155,20 @@ function getNodePreviewImage(node) {
  */
 function drawNodePreview(ctx, node, x, y, w, h) {
     const src = getNodePreviewImage(node);
-    if (!src) return;
+    // If no preview image is available but the node likely contains an image
+    // (e.g. a Load Image node), draw a white square as a placeholder.
+    if (!src) {
+        try {
+            const name = String(node?.title || node?.type || "").toLowerCase();
+            if (name.includes("image")) {
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
+            }
+        } catch (_) {
+            // ignore errors
+        }
+        return;
+    }
     let img = previewCache.get(src);
     if (!img) {
         img = new Image();
