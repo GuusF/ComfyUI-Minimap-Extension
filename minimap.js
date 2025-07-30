@@ -45,8 +45,9 @@ const previewCache = new Map();
 function isNodeError(node) {
     try {
         if (node == null) return false;
-        // ComfyUI sets this flag when a node fails to execute
-        if (node.error === true || node.has_error === true) return true;
+        // ComfyUI sets these flags when a node fails to execute.  Some
+        // versions use has_error, others use has_errors (plural).  Check both.
+        if (node.error === true || node.has_error === true || node.has_errors === true) return true;
         // Some versions expose an invalid flag directly on the node
         if (node.invalid === true || node.is_invalid === true || node.isInvalid === true) return true;
         // Some nodes contain a flags object with error information
